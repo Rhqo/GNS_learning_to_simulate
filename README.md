@@ -2,6 +2,10 @@
 
 **Using python3.7 tensorflow(1.15.0)**
 
+To use GPU, deactivate this code at the top of train.py
+
+    os.environ['CUDA_VISIBLE_DEVICES'] = '-1'
+
 After downloading the repo, and from the **parent directory**. Install dependencies:
 
     pip install -r learning_to_simulate/requirements.txt
