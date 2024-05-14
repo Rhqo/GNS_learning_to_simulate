@@ -46,7 +46,7 @@ from learning_to_simulate import learned_simulator
 from learning_to_simulate import noise_utils
 from learning_to_simulate import reading_utils
 
-os.environ['CUDA_VISIBLE_DEVICES'] = '-1'
+# os.environ['CUDA_VISIBLE_DEVICES'] = '-1'
 
 flags.DEFINE_enum(
     'mode', 'train', ['train', 'eval', 'eval_rollout'],
