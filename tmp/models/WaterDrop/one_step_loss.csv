@@ -1,0 +1,3 @@
+step, loss
+0,Tensor("truediv_4:0", shape=(), dtype=float32)
+<tf.Variable 'global_step:0' shape=() dtype=int64_ref>,Tensor("truediv_4:0", shape=(), dtype=float32)
