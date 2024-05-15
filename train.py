@@ -300,6 +300,24 @@ def _get_simulator(model_kwargs, metadata, acc_noise_std, vel_noise_std):
       particle_type_embedding_size=16)
   return simulator
 
+# Save Loss to file
+def save_loss_to_file(step, loss, filename):
+    # with tf.Session() as sess:
+    #     sess.run(tf.global_variables_initializer())
+    #     step = sess.run(step)
+    loss_value = []
+    with tf.Session() as sess:
+        sess.run(tf.global_variables_initializer())
+        step_value = sess.run(step)
+        # loss_value = sess.run(loss)
+        # for i in loss:
+        #     loss_value.append(i)
+        loss_value = loss
+
+
+    with open(filename, 'a') as f:
+        f.write(str(step) + ',' + str(loss_value) + '\n')
+        f.close()
 
 def get_one_step_estimator_fn(data_path,
                               noise_std,
@@ -309,6 +327,12 @@ def get_one_step_estimator_fn(data_path,
                               message_passing_steps=10):
   """Gets one step model for training simulation."""
   metadata = _read_metadata(data_path)
+
+  loss_file = os.path.join(FLAGS.model_path, 'one_step_loss.csv')
+  if not os.path.exists(loss_file):
+      with open(loss_file, 'w') as f:
+          f.write("step, loss" + '\n')
+          f.close()
 
   model_kwargs = dict(
       latent_size=latent_size,
@@ -357,6 +381,10 @@ def get_one_step_estimator_fn(data_path,
     opt = tf.train.AdamOptimizer(learning_rate=lr)
     train_op = opt.minimize(loss, global_step)
 
+    #####################################################
+    save_loss_to_file(global_step, loss, loss_file)
+    #####################################################
+
     # Calculate next position and add some additional eval metrics (only eval).
     predicted_next_position = simulator(
         position_sequence=features['position'],
@@ -372,6 +400,7 @@ def get_one_step_estimator_fn(data_path,
         'one_step_position_mse': tf.metrics.mean_squared_error(
             predicted_next_position, target_next_position)
     }
+
     return tf_estimator.EstimatorSpec(
         mode=mode,
         train_op=train_op,
@@ -427,7 +456,6 @@ def get_rollout_estimator_fn(data_path,
 def _read_metadata(data_path):
   with open(os.path.join(data_path, 'metadata.json'), 'rt') as fp:
     return json.loads(fp.read())
-
 
 def main(_):
   """Train or evaluates the model."""
