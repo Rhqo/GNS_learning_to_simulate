@@ -302,21 +302,15 @@ def _get_simulator(model_kwargs, metadata, acc_noise_std, vel_noise_std):
 
 # Save Loss to file
 def save_loss_to_file(step, loss, filename):
+
     # with tf.Session() as sess:
     #     sess.run(tf.global_variables_initializer())
-    #     step = sess.run(step)
-    loss_value = []
-    with tf.Session() as sess:
-        sess.run(tf.global_variables_initializer())
-        step_value = sess.run(step)
-        # loss_value = sess.run(loss)
-        # for i in loss:
-        #     loss_value.append(i)
-        loss_value = loss
+    #     step_value = sess.run(step)
+    #     loss_value = loss
 
 
     with open(filename, 'a') as f:
-        f.write(str(step) + ',' + str(loss_value) + '\n')
+        f.write(str(step) + ',' + str(loss) + '\n')
         f.close()
 
 def get_one_step_estimator_fn(data_path,
@@ -325,90 +319,88 @@ def get_one_step_estimator_fn(data_path,
                               hidden_size=128,
                               hidden_layers=2,
                               message_passing_steps=10):
-  """Gets one step model for training simulation."""
-  metadata = _read_metadata(data_path)
+    """Gets one step model for training simulation."""
+    metadata = _read_metadata(data_path)
 
-  loss_file = os.path.join(FLAGS.model_path, 'one_step_loss.csv')
-  if not os.path.exists(loss_file):
-      with open(loss_file, 'w') as f:
-          f.write("step, loss" + '\n')
-          f.close()
+    model_kwargs = dict(
+        latent_size=latent_size,
+        mlp_hidden_size=hidden_size,
+        mlp_num_hidden_layers=hidden_layers,
+        num_message_passing_steps=message_passing_steps)
 
-  model_kwargs = dict(
-      latent_size=latent_size,
-      mlp_hidden_size=hidden_size,
-      mlp_num_hidden_layers=hidden_layers,
-      num_message_passing_steps=message_passing_steps)
+    def estimator_fn(features, labels, mode):
+        target_next_position = labels
+        simulator = _get_simulator(model_kwargs, metadata,
+                                   vel_noise_std=noise_std,
+                                   acc_noise_std=noise_std)
+        # Sample the noise to add to the inputs to the model during training.
+        sampled_noise = noise_utils.get_random_walk_noise_for_position_sequence(
+            features['position'], noise_std_last_step=noise_std)
+        non_kinematic_mask = tf.logical_not(
+            get_kinematic_mask(features['particle_type']))
+        noise_mask = tf.cast(
+            non_kinematic_mask, sampled_noise.dtype)[:, tf.newaxis, tf.newaxis]
+        sampled_noise *= noise_mask
 
-  def estimator_fn(features, labels, mode):
-    target_next_position = labels
-    simulator = _get_simulator(model_kwargs, metadata,
-                               vel_noise_std=noise_std,
-                               acc_noise_std=noise_std)
-    # Sample the noise to add to the inputs to the model during training.
-    sampled_noise = noise_utils.get_random_walk_noise_for_position_sequence(
-        features['position'], noise_std_last_step=noise_std)
-    non_kinematic_mask = tf.logical_not(
-        get_kinematic_mask(features['particle_type']))
-    noise_mask = tf.cast(
-        non_kinematic_mask, sampled_noise.dtype)[:, tf.newaxis, tf.newaxis]
-    sampled_noise *= noise_mask
+        # Get the predictions and target accelerations.
+        pred_target = simulator.get_predicted_and_target_normalized_accelerations(
+            next_position=target_next_position,
+            position_sequence=features['position'],
+            position_sequence_noise=sampled_noise,
+            n_particles_per_example=features['n_particles_per_example'],
+            particle_types=features['particle_type'],
+            global_context=features.get('step_context'))
+        pred_acceleration, target_acceleration = pred_target
 
-    # Get the predictions and target accelerations.
-    pred_target = simulator.get_predicted_and_target_normalized_accelerations(
-        next_position=target_next_position,
-        position_sequence=features['position'],
-        position_sequence_noise=sampled_noise,
-        n_particles_per_example=features['n_particles_per_example'],
-        particle_types=features['particle_type'],
-        global_context=features.get('step_context'))
-    pred_acceleration, target_acceleration = pred_target
+        # Calculate the loss and mask out loss on kinematic particles.
+        loss = (pred_acceleration - target_acceleration)**2
 
-    # Calculate the loss and mask out loss on kinematic particles/
-    loss = (pred_acceleration - target_acceleration)**2
+        num_non_kinematic = tf.reduce_sum(
+            tf.cast(non_kinematic_mask, tf.float32))
+        loss = tf.where(non_kinematic_mask, loss, tf.zeros_like(loss))
+        loss = tf.reduce_sum(loss) / tf.reduce_sum(num_non_kinematic)
+        global_step = tf.train.get_global_step()
+        # Set learning rate to decay from 1e-4 to 1e-6 exponentially.
+        min_lr = 1e-6
+        lr = tf.train.exponential_decay(learning_rate=1e-4 - min_lr,
+                                        global_step=global_step,
+                                        decay_steps=int(5e6),
+                                        decay_rate=0.1) + min_lr
+        opt = tf.train.AdamOptimizer(learning_rate=lr)
+        train_op = opt.minimize(loss, global_step)
 
-    num_non_kinematic = tf.reduce_sum(
-        tf.cast(non_kinematic_mask, tf.float32))
-    loss = tf.where(non_kinematic_mask, loss, tf.zeros_like(loss))
-    loss = tf.reduce_sum(loss) / tf.reduce_sum(num_non_kinematic)
-    global_step = tf.train.get_global_step()
-    # Set learning rate to decay from 1e-4 to 1e-6 exponentially.
-    min_lr = 1e-6
-    lr = tf.train.exponential_decay(learning_rate=1e-4 - min_lr,
-                                    global_step=global_step,
-                                    decay_steps=int(5e6),
-                                    decay_rate=0.1) + min_lr
-    opt = tf.train.AdamOptimizer(learning_rate=lr)
-    train_op = opt.minimize(loss, global_step)
+        # Calculate next position and add some additional eval metrics (only eval).
+        predicted_next_position = simulator(
+            position_sequence=features['position'],
+            n_particles_per_example=features['n_particles_per_example'],
+            particle_types=features['particle_type'],
+            global_context=features.get('step_context'))
 
-    #####################################################
-    save_loss_to_file(global_step, loss, loss_file)
-    #####################################################
+        predictions = {'predicted_next_position': predicted_next_position}
 
-    # Calculate next position and add some additional eval metrics (only eval).
-    predicted_next_position = simulator(
-        position_sequence=features['position'],
-        n_particles_per_example=features['n_particles_per_example'],
-        particle_types=features['particle_type'],
-        global_context=features.get('step_context'))
+        eval_metrics_ops = {
+            'loss_mse': tf.metrics.mean_squared_error(
+                pred_acceleration, target_acceleration),
+            'one_step_position_mse': tf.metrics.mean_squared_error(
+                predicted_next_position, target_next_position)
+        }
 
-    predictions = {'predicted_next_position': predicted_next_position}
+        # Logging hook to print loss
+        logging_hook = tf.train.LoggingTensorHook(
+            {"loss": loss},
+            every_n_iter=100
+        )
 
-    eval_metrics_ops = {
-        'loss_mse': tf.metrics.mean_squared_error(
-            pred_acceleration, target_acceleration),
-        'one_step_position_mse': tf.metrics.mean_squared_error(
-            predicted_next_position, target_next_position)
-    }
+        return tf_estimator.EstimatorSpec(
+            mode=mode,
+            train_op=train_op,
+            loss=loss,
+            predictions=predictions,
+            eval_metric_ops=eval_metrics_ops,
+            training_hooks=[logging_hook] if mode == tf_estimator.ModeKeys.TRAIN else None)
 
-    return tf_estimator.EstimatorSpec(
-        mode=mode,
-        train_op=train_op,
-        loss=loss,
-        predictions=predictions,
-        eval_metric_ops=eval_metrics_ops)
+    return estimator_fn
 
-  return estimator_fn
 
 
 def get_rollout_estimator_fn(data_path,
@@ -465,11 +457,24 @@ def main(_):
         get_one_step_estimator_fn(FLAGS.data_path, FLAGS.noise_std),
         model_dir=FLAGS.model_path)
     if FLAGS.mode == 'train':
+      loss_file = os.path.join(FLAGS.model_path, 'one_step_loss.csv')
+
+      if not os.path.exists(loss_file):
+        with open(loss_file, 'w') as f:
+            f.write("step, loss" + '\n')
+            f.close()
       # Train all the way through.
+      logging_hook = tf.train.LoggingTensorHook(
+          tensors={"loss": "loss"},
+          every_n_iter=100
+      )
       estimator.train(
           input_fn=get_input_fn(FLAGS.data_path, FLAGS.batch_size,
                                 mode='one_step_train', split='train'),
-          max_steps=FLAGS.num_steps)
+          max_steps=FLAGS.num_steps,
+          hooks=[logging_hook]
+      )
+
     else:
       # One-step evaluation from checkpoint.
       eval_metrics = estimator.evaluate(input_fn=get_input_fn(
