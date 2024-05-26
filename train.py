@@ -318,7 +318,7 @@ def get_one_step_estimator_fn(data_path,
                               latent_size=128,
                               hidden_size=128,
                               hidden_layers=2,
-                              message_passing_steps=10): # =7): #
+                              message_passing_steps =5): #=10):
     """Gets one step model for training simulation."""
     metadata = _read_metadata(data_path)
 
@@ -408,7 +408,7 @@ def get_rollout_estimator_fn(data_path,
                              latent_size=128,
                              hidden_size=128,
                              hidden_layers=2,
-                             message_passing_steps=10): #=7):
+                             message_passing_steps=5): #=10):
   """Gets the model function for tf.estimator.Estimator."""
   metadata = _read_metadata(data_path)
 
