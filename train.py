@@ -318,7 +318,7 @@ def get_one_step_estimator_fn(data_path,
                               latent_size=128,
                               hidden_size=128,
                               hidden_layers=2,
-                              message_passing_steps =5): #=10):
+                              message_passing_steps =10): #=10):
     """Gets one step model for training simulation."""
     metadata = _read_metadata(data_path)
 
@@ -408,7 +408,7 @@ def get_rollout_estimator_fn(data_path,
                              latent_size=128,
                              hidden_size=128,
                              hidden_layers=2,
-                             message_passing_steps=5): #=10):
+                             message_passing_steps=10): #=10):
   """Gets the model function for tf.estimator.Estimator."""
   metadata = _read_metadata(data_path)
 
@@ -457,12 +457,12 @@ def main(_):
         get_one_step_estimator_fn(FLAGS.data_path, FLAGS.noise_std),
         model_dir=FLAGS.model_path)
     if FLAGS.mode == 'train':
-      loss_file = os.path.join(FLAGS.model_path, 'one_step_loss.csv')
-
-      if not os.path.exists(loss_file):
-        with open(loss_file, 'w') as f:
-            f.write("step, loss" + '\n')
-            f.close()
+      # loss_file = os.path.join(FLAGS.model_path, 'one_step_loss.csv')
+      #
+      # if not os.path.exists(loss_file):
+      #   with open(loss_file, 'w') as f:
+      #       f.write("step, loss" + '\n')
+      #       f.close()
       # Train all the way through.
       logging_hook = tf.train.LoggingTensorHook(
           tensors={"loss": "loss"},
