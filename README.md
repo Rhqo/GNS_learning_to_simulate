@@ -1,6 +1,6 @@
 # Learning to Simulate Complex Physics with Graph Networks (ICML 2020)
 
-**Using python3.7 tensorflow(1.15.0)**
+**Using python3.7 tensorflow(1.15.4)**
 
 To use GPU, deactivate this code at the top of train.py
 
