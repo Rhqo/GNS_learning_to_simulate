@@ -2,9 +2,11 @@
 
 **Using python3.7 tensorflow(1.15.4)**
 
-**pdf: https://arxiv.org/abs/2002.09405**
+pdf: https://arxiv.org/abs/2002.09405
 
-**datasets: https://sites.google.com/view/learning-to-simulate**
+datasets: https://sites.google.com/view/learning-to-simulate
+
+origin: https://github.com/google-deepmind/deepmind-research/tree/master/learning_to_simulate
 
 To use GPU, deactivate this code at the top of train.py
 
