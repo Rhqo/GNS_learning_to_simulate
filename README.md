@@ -2,8 +2,9 @@
 
 **Using python3.7 tensorflow(1.15.4)**
 
-pdf: https://arxiv.org/abs/2002.09405
-datasets: https://sites.google.com/view/learning-to-simulate
+**pdf: https://arxiv.org/abs/2002.09405**
+
+**datasets: https://sites.google.com/view/learning-to-simulate**
 
 To use GPU, deactivate this code at the top of train.py
 
