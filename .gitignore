@@ -160,3 +160,4 @@ cython_debug/
 #.idea/
 *.tfrecord
 /tmp/rollouts/Water-3D/
+tmp/rollouts/rollouts.zip
